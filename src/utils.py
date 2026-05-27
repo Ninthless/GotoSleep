@@ -1,10 +1,10 @@
 import os
+import re
 import subprocess
-import sys
 
 def check_root():
     """Check if the application is running with root privileges."""
-    return os.geteuid() == 0
+    return hasattr(os, "geteuid") and os.geteuid() == 0
 
 def get_wireless_interfaces():
     """
@@ -45,18 +45,27 @@ def enable_monitor_mode(interface):
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         
         if result.returncode == 0:
-            # Parse output to find monitor interface name (often wlan0mon)
-            for line in result.stdout.split('\n'):
-                if "monitor mode enabled" in line:
-                    # Regex or simple split could work, usually it says "on [interface]"
-                    pass
-            
-            # Simple heuristic: check if interface + 'mon' exists, or if original interface is now monitor
-            return True, "Detected via airmon-ng", result.stdout
+            monitor_interface = detect_monitor_interface(interface, result.stdout)
+            return True, monitor_interface, result.stdout
         else:
             return False, interface, result.stderr
     except FileNotFoundError:
         return False, interface, "airmon-ng not found"
+
+def detect_monitor_interface(interface, output):
+    candidates = []
+    for line in output.splitlines():
+        candidates.extend(re.findall(r'\]([A-Za-z0-9_.:-]+mon)\b', line))
+        candidates.extend(re.findall(r'\bon\s+([A-Za-z0-9_.:-]+mon)\b', line))
+
+    candidates.append(f"{interface}mon")
+    candidates.append(interface)
+
+    for candidate in candidates:
+        if os.path.exists(f"/sys/class/net/{candidate}"):
+            return candidate
+
+    return candidates[0]
 
 def disable_monitor_mode(interface):
     """

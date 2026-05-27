@@ -3,11 +3,10 @@ from PyQt6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QTableWidgetItem, QHeaderView, QMessageBox, QMenu,
                              QDialog, QFormLayout, QSpinBox, QDialogButtonBox,
                              QApplication, QSplitter, QListWidget, QInputDialog)
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QAction, QColor, QBrush
 from .utils import get_wireless_interfaces, enable_monitor_mode, disable_monitor_mode, check_root, get_vendor
 from .process import AirodumpScanner, Mdk4Attacker, HunterThread
-import sys
 
 class AttackConfigDialog(QDialog):
     def __init__(self, parent, essid, bssid, channel):
@@ -124,6 +123,8 @@ class MainWindow(QMainWindow):
         self.attacker = None
         self.hunter = None
         self.hunter_targets = [] # Persist targets in memory
+        self.is_root = check_root()
+        self.monitor_interface = None
         
         # UI Setup
         central_widget = QWidget()
@@ -243,7 +244,11 @@ class MainWindow(QMainWindow):
         interfaces = get_wireless_interfaces()
         self.combo_interfaces.addItems(interfaces)
         if interfaces:
-            self.btn_scan.setEnabled(True)
+            self.btn_scan.setEnabled(self.is_root)
+        else:
+            self.btn_scan.setEnabled(False)
+        self.btn_monitor.setEnabled(self.is_root)
+        self.btn_hunter.setEnabled(self.is_root)
 
     def toggle_monitor_mode(self):
         iface = self.combo_interfaces.currentText()
@@ -255,9 +260,13 @@ class MainWindow(QMainWindow):
         success, msg, output = enable_monitor_mode(iface)
         
         if success:
-            self.status_label.setText(f"Monitor mode enabled on {iface}")
-            QMessageBox.information(self, "Success", f"Monitor mode enabled.\n{msg}")
+            self.monitor_interface = msg
             self.refresh_interfaces()
+            index = self.combo_interfaces.findText(msg)
+            if index >= 0:
+                self.combo_interfaces.setCurrentIndex(index)
+            self.status_label.setText(f"Monitor mode enabled on {msg}")
+            QMessageBox.information(self, "Success", f"Monitor mode enabled on {msg}.")
         else:
             self.status_label.setText("Failed to enable monitor mode")
             QMessageBox.critical(self, "Error", f"Failed to enable monitor mode.\n{output}")
@@ -268,6 +277,7 @@ class MainWindow(QMainWindow):
             self.hunter.wait()
             self.btn_hunter.setText("Hunter Mode")
             self.btn_hunter.setStyleSheet("background-color: #333; color: white; font-weight: bold;")
+            self.refresh_interfaces()
             self.status_label.setText("Hunter Mode Stopped")
             return
 
@@ -581,4 +591,9 @@ class MainWindow(QMainWindow):
         if self.attacker:
             self.attacker.stop()
             self.attacker.wait()
+        if self.hunter:
+            self.hunter.stop()
+            self.hunter.wait()
+        if self.monitor_interface:
+            disable_monitor_mode(self.monitor_interface)
         event.accept()

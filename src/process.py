@@ -1,6 +1,5 @@
 import subprocess
 import os
-import csv
 import time
 import tempfile
 import shutil
@@ -295,8 +294,8 @@ class Mdk4Attacker(QThread):
                         
                     proc = subprocess.Popen(
                         cmd,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
                         preexec_fn=os.setsid
                     )
                     
